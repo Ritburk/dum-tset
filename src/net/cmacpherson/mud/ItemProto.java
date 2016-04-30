@@ -60,6 +60,7 @@ public class ItemProto implements XML.Processable {
   public Item.Status status;
   public double mContainerWeight;
   public int mCapacity;
+  public ItemProto[] contents;
   public Item.Poison poison;
   public Liquid liquid;
   
@@ -126,6 +127,7 @@ public class ItemProto implements XML.Processable {
     proto.status = status;
     proto.mContainerWeight = mContainerWeight;
     proto.mCapacity = mCapacity;
+    proto.contents = contents.clone();
     proto.poison = poison;
     proto.liquid = liquid;
     return proto;
@@ -201,6 +203,9 @@ public class ItemProto implements XML.Processable {
     item.status = status;
     item.mContainerWeight = mContainerWeight;
     item.mCapacity = mCapacity;
+    if (contents.length > 0)
+      for (ItemProto content : contents)
+        item.contents.add(content.generate(resetID));
     item.liquid = liquid;
     item.poison = poison;
     return item;
@@ -208,7 +213,7 @@ public class ItemProto implements XML.Processable {
 
   @Override
   public Element compile(Document doc) {
-    Element itemE = doc.createElement("item");
+    Element itemE = doc.createElement("item_proto");
     itemE.appendChild(XML.cC(doc, "vnum", Long.toString(vnum)));
     itemE.appendChild(XML.cC(doc, "name", name));
     itemE.appendChild(XML.cC(doc, "long_name", longName));
@@ -284,6 +289,12 @@ public class ItemProto implements XML.Processable {
       itemE.appendChild(XML.cC(doc, "status", status.name()));
     itemE.appendChild(XML.cC(doc, "max_container_weight", Double.toString(mContainerWeight)));
     itemE.appendChild(XML.cC(doc, "max_capacity", Integer.toString(mCapacity)));
+    if (contents.length > 0) {
+      Element e = doc.createElement("contents");
+      for (ItemProto proto : contents)
+        e.appendChild(proto.compile(doc));
+      itemE.appendChild(e);
+    }
     if (poison != null)
       itemE.appendChild(XML.cC(doc, "poison", poison.name()));
     if (liquid != null)
@@ -426,7 +437,22 @@ public class ItemProto implements XML.Processable {
           mContainerWeight = Double.parseDouble(((Text)e.getFirstChild()).getData());
         else if (e.getTagName().equals("max_capacity"))
           mCapacity = Integer.parseInt(((Text)e.getFirstChild()).getData());
-        else if (e.getTagName().equals("poison"))
+        else if (e.getTagName().equals("contents")) {
+          ArrayList<ItemProto> temp = new ArrayList<ItemProto>();
+          NodeList children2 = e.getChildNodes();
+          for (int j = 0; j < children2.getLength(); j++) {
+            Node child2 = children2.item(j);
+            if (child2 instanceof Element) {
+              Element e2 = (Element)child2;
+              if (e2.getTagName().equals("item_proto")) {
+                ItemProto proto = new ItemProto();
+                proto.load(e2);
+                temp.add(proto);
+              }
+            }
+          }
+          contents = temp.toArray(new ItemProto[] {});
+        } else if (e.getTagName().equals("poison"))
           poison = Item.Poison.valueOf(((Text)e.getFirstChild()).getData());
         else if (e.getTagName().equals("liquid"))
           liquid = Liquid.valueOf(((Text)e.getFirstChild()).getData());

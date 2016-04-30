@@ -174,6 +174,7 @@ public class ServerThread extends Thread {
       print("No universe data found. Loading random plane...");
       
       //TODO load random plane
+      //when making options for generator, use biome to describe algorithm
     }
     print("Building associations...");
     int areaCount = 0;

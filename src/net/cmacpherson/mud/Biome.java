@@ -4,187 +4,182 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
 
 public class Biome {
-
-  public String name;
-  public int version;
   
-  //version 1
-  public String[] roomNames;
-  public String[][] roomDescriptions;
-  public long[] itemVNUMs;
-  public long[] mobVNUMs;
-  public double[] diminishingReturnsForExitChances;
-  public double[] directionalChances;
-
-  /*
-   * Biome Format (version 1):
+  /*   VERSION 2
    * 
-   * Each line has a descriptor followed by a ':' and finally the data required
+   * need to have this be more structual
+   * we are thinking that information needs to be more organized
+   * version 1 takes into account entry order, but may be too confusing
+   * should use xml or a similar structure
    * 
-   * Descriptors:
-   * V = version = int (absolutely must have and must be first line)
-   * N = room name = String (must have at least 1, can be entered multiple times)
-   * D = room description = String (must have at least 1, can be entered multiple times, '|' denotes line separator)
-   * M = mob proto vnum = long (can be entered multiple times)
-   * I = item proto vnum = long (can be entered multiple times)
-   * R = diminishing returns for exit chances = list of 6 doubles
-   * C = directional chances for exits = list of 6 doubles (must add to 1, '|' denotes separator)
+   * rooms need to have a description of what type of space they need
+   *   -this could be like it's a spread area (i.e. 2x2 or >)
+   *   -weather it requires a vertical component like tree or flying in the air
+   *   -needs to be underground
+   *   (these determine that the generator needs to keep track of what the
+   *    ground level is across the area (if it's mountainous it goes up but
+   *    is still considered ground level)
+   * also need room titles/description that correspond to each other
+   * also if certain rooms require specific items located in it
+   * maybe an "area" room description has several interlocking different
+   *  rooms that could relate (i.e. a house with several rooms)
+   * 
+   * have biome hold a map containing vars and values that are called based on
+   * specific algorithms when generating areas
    * 
    */
-  public static Biome load(ServerThread server, File file) throws IOException {
-    server.print("Loading biome frome file: " + file.getName());
-    Biome biome = new Biome();
-    biome.name = file.getName().split("\\.")[0].toUpperCase().replaceAll(" ", "_");
+  
+  public HashMap<String, Object> vars = new HashMap<String, Object>();
+  
+  @SuppressWarnings("unchecked")
+  public boolean load(ServerThread server, File file) throws IOException {
+    server.print("Loading biome from file: " + file.getName());
     BufferedReader in = new BufferedReader(new FileReader(file));
-    String line = in.readLine();
-    boolean error = false;
-    if (line == null)
-      error |= error("", "File Error", "File has no data.", server);
-    else {
-      String[] args = line.split(":");
-      if (args.length < 2)
-        error |= error(line, "Invalid Syntax", "Wrong number of arguments.", server);
-      else {
-        if (args[0].charAt(0) != 'V' ||
-            args[0].charAt(0) != 'v')
-          error |= error(line, "Descriptor Error", "First line must describe version.", server);
-        else if (args.length != 2)
-          error |= error(line, "Invalid Argument Length", args[0], server);
-        else {
-          try {
-            biome.version = Integer.parseInt(args[1]);
-          } catch (NumberFormatException e) {
-            error |= error(line, "Value Error", "Expected integer.", server);
-          }
-        }
-      }
-    }
-    switch (biome.version) {
-    case 1:
-      error |= version1(biome, file.getName(), in, server);
-      break;
+    LinkedList<String> lines = new LinkedList<String>();
+    String line = null;
+    while ((line = in.readLine()) != null) {
+      line = line.trim();
+      if (line.charAt(0) != '#' &&
+          line.equals(""))
+        lines.add(line);
     }
     in.close();
-    if (error) {
-      server.print("Errors encountered while loading biome.");
-      return null;
+    while (!lines.isEmpty()) {
+      line = lines.removeFirst();
+      if (line.equalsIgnoreCase("ROOM")) {
+        RoomInfo room = parseRoom(lines);
+        if (room == null)
+          return false;
+        ArrayList<RoomInfo> rooms = (ArrayList<RoomInfo>)vars.get("rooms");
+        if (rooms == null) {
+          rooms = new ArrayList<RoomInfo>();
+          vars.put("rooms", rooms);
+        }
+        rooms.add(room);
+      } else if (line.equalsIgnoreCase("REGION")) {
+        RegionInfo region = parseRegion(lines);
+        if (region == null)
+          return false;
+        ArrayList<RegionInfo> regions = (ArrayList<RegionInfo>)vars.get("regions");
+        if (regions == null) {
+          regions = new ArrayList<RegionInfo>();
+          vars.put("regions", regions);
+        }
+        regions.add(region);
+      } else if (line.equalsIgnoreCase("ITEM")) {
+        ItemInfo item = parseItem(lines);
+        if (item == null)
+          return false;
+        ArrayList<ItemInfo> items = (ArrayList<ItemInfo>)vars.get("items");
+        if (items == null) {
+          items = new ArrayList<ItemInfo>();
+          vars.put("items", items);
+        }
+        items.add(item);
+      } else if (line.equalsIgnoreCase("MOB")) {
+        MobInfo mob = parseMob(lines);
+        if (mob == null)
+          return false;
+        ArrayList<MobInfo> mobs = (ArrayList<MobInfo>)vars.get("mobs");
+        if (mobs == null) {
+          mobs = new ArrayList<MobInfo>();
+          vars.put("mobs", mobs);
+        }
+        mobs.add(mob);
+      } else {
+        Object[] var = parseVar(line);
+        if (var == null) {
+          server.print("Unrecognized variable entry: " + line);
+          return false;
+        }
+        vars.put((String)var[0], var[1]);
+      }
     }
-    server.print("Biome loaded successfully.");
-    return biome;
-  }
-  
-  private static boolean error(String line,
-                               String desc,
-                               String arg,
-                               ServerThread server) {
-    server.print("Error on line: " + line + "\n" +
-                 "  " + desc + ": " + arg);
     return true;
   }
   
-  private static boolean version1(Biome biome,
-                                  String filename,
-                                  BufferedReader in, 
-                                  ServerThread server) throws IOException {
-    boolean error = false;
-    String line = null;
-    while ((line = in.readLine()) != null) {
-      String[] args = line.split(":");
-      if (args.length < 2)
-        error |= error(line, "Invalid Syntax", "Wrong number of arguments.", server);
-      else {
-        switch (args[0].charAt(0)) {
-        case 'V':
-        case 'v':
-          //already taken care of
-          break;
-        case 'N':
-        case 'n':
-          String[] names = new String[biome.roomNames.length + 1];
-          System.arraycopy(biome.roomNames, 0, names, 0, biome.roomNames.length);
-          biome.roomNames = names;
-          break;
-        case 'D':
-        case 'd':
-          String[][] desc = new String[biome.roomDescriptions.length + 1][];
-          for (int i = 0; i < biome.roomDescriptions.length; i++)
-            System.arraycopy(biome.roomDescriptions[i], 0, desc[i], 0, biome.roomDescriptions[i].length);
-          desc[desc.length - 1] = args[1].split("|");
-          break;
-        case 'M':
-        case 'm':
-          long[] mobs = new long[biome.mobVNUMs.length + 1];
-          System.arraycopy(biome.mobVNUMs, 0, mobs, 0, biome.mobVNUMs.length);
-          try {
-            mobs[mobs.length - 1] = Long.parseLong(args[1]);
-            biome.mobVNUMs = mobs;
-          } catch (NumberFormatException e) {
-            error |= error(line, "Value Error", "Expected long.", server);
-          }
-          break;
-        case 'I':
-        case 'i':
-          long[] items = new long[biome.itemVNUMs.length + 1];
-          System.arraycopy(biome.itemVNUMs, 0, items, 0, biome.itemVNUMs.length);
-          try {
-            items[items.length - 1] = Long.parseLong(args[1]);
-            biome.itemVNUMs = items;
-          } catch (NumberFormatException e) {
-            error |= error(line, "Value Error", "Expected long.", server);
-          }
-          break;
-        case 'R':
-        case 'r':
-          String[] list = args[1].split("|");
-          if (list.length != 6)
-            error |= error(line, "Value Error", "Expected 6 doubles.", server);
-          else {
-            biome.diminishingReturnsForExitChances = new double[6];
-            try {
-              for (int i = 0; i < 6; i++)
-                biome.diminishingReturnsForExitChances[i] = Double.parseDouble(list[i].trim());
-            } catch (NumberFormatException e) {
-              biome.diminishingReturnsForExitChances = null;
-              error |= error(line, "Value Error", "Expected 6 doubles.", server);
-            }
-          }
-          break;
-        case 'C':
-        case 'c':
-          list = args[1].split("|");
-          if (list.length != 6)
-            error |= error(line, "Value Error", "Expected 6 doubles.", server);
-          else {
-            biome.directionalChances = new double[6];
-            try {
-              for (int i = 0; i < 6; i++)
-                biome.directionalChances[i] = Double.parseDouble(list[i].trim());
-              double total = 0;
-              for (double d : biome.directionalChances)
-                total += d;
-              if (total != 1.0) {
-                error |= error(line, "Value Error", "Values must add up to 1.", server);
-                biome.directionalChances = null;
-              }
-            } catch (NumberFormatException e) {
-              biome.directionalChances = null;
-              error |= error(line, "Value Error", "Expected 6 doubles.", server);
-            }
-          }
-          break;
-        default:
-          error |= error(line, "Unknown Descriptor", args[0], server);
-        }
-      }
-    }
-    if (!error) {
-      if (biome.diminishingReturnsForExitChances == null)
-        biome.diminishingReturnsForExitChances = new double[] {0.9, 0.7, 0.5, 0.3, 0.1, 0.1};
-      if (biome.directionalChances == null)
-        biome.directionalChances = new double[] {0.2, 0.2, 0.2, 0.2, 0.1, 0.1};
-    }
-    return error;
+  private Object[] parseVar(String line) {
+    Object[] var = line.split("=");
+    if (var.length != 2)
+      return null;
+    var[0] = ((String)var[0]).trim();
+    String s = ((String)var[1]).trim();
+    var[0] = null;
+    if (s.equalsIgnoreCase("true"))
+      var[1] = true;
+    else if (s.equalsIgnoreCase("false"))
+      var[1] = false;
+    if (var[1] != null)
+      return var;
+    try {
+      var[1] = Integer.parseInt(s);
+      return var;
+    } catch (NumberFormatException e) {}
+    try {
+      var[1] = Long.parseLong(s);
+      return var;
+    } catch (NumberFormatException e) {}
+    try {
+      var[1] = Double.parseDouble(s);
+      return var;
+    } catch (NumberFormatException e) {}
+    var[1] = s.toUpperCase();
+    return var;
+  }
+  
+  private RoomInfo parseRoom(LinkedList<String> lines) {
+    RoomInfo room = new RoomInfo();
+    
+    return room;
+  }
+  
+  private RegionInfo parseRegion(LinkedList<String> lines) {
+    RegionInfo region = new RegionInfo();
+    
+    return region;
+  }
+  
+  private ItemInfo parseItem(LinkedList<String> lines) {
+    ItemInfo item = new ItemInfo();
+    
+    return item;
+  }
+  
+  private MobInfo parseMob(LinkedList<String> lines) {
+    MobInfo mob = new MobInfo();
+    
+    return mob;
+  }
+  
+  public class RoomInfo {
+    public boolean unique = false;
+    public String name;
+    public String[] description;
+    public ItemInfo[] items;
+    public MobInfo[] mobs;
+  }
+  
+  public class RegionInfo {
+    public boolean unique = false;
+    public HashMap<String, Object> vars = new HashMap<String, Object>();
+    public RoomInfo[] rooms;
+    public ItemInfo[] items;
+    public MobInfo[] mobs;
+  }
+  
+  public class ItemInfo {
+    public long vnum;
+    public ItemInfo[] contents;
+  }
+  
+  public class MobInfo {
+    public long vnum;
+    public ItemInfo[] contents;
+    public ItemInfo[] equiped;
   }
 }

@@ -22,9 +22,11 @@ public class Generator {
     ArrayList<Biome> biomes = new ArrayList<Biome>();
     for (File file : files) {
       try {
-        Biome b = Biome.load(server, file);
-        if (b == null)
+        Biome b = new Biome();
+        if (!b.load(server, file))
           server.print("Error loading biome.");
+        else
+          biomes.add(b);
       } catch (Exception e) {
         server.print("Error loading biome from file: " + file.getAbsolutePath());
         e.printStackTrace();
@@ -45,7 +47,14 @@ public class Generator {
     if (algo == null)
       server.print("Error finding inital algorithm: " + opts.getAlgorithmClass().getName());
     // etc...
-    commit(algo.generate(opts));
+    Room[][][] map = algo.generate(server, opts);
+    if (map == null) {
+      //something went wrong...could be:
+      //  Options were of wrong type for algorithm
+      
+      return;
+    }
+    commit(map);
     // etc...
   }
   
@@ -66,10 +75,10 @@ public class Generator {
   
   public void extendMap(Room attachmentPoint, Direction dir) {
     //TODO extend map
-    
+    //use biome to find algorithm?
   }
   
-  private void commit(Room[][][] rooms) {
+  private void commit(Room[][][] map) {
     //TODO commit generated rooms to server's universe
     
   }
@@ -79,6 +88,6 @@ public class Generator {
   }
   
   public interface Algorithm {
-    public Room[][][] generate(Options opts);
+    public Room[][][] generate(ServerThread server, Options opts);
   }
 }

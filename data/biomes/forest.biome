@@ -1,3 +1,69 @@
-V:1
-N:In a field of trees
-D:A dense forest stands in front of you in all directions.  There must be a path|in some direction.
+  # required
+  name = forest
+  # algorithm must be a well formed class name implementing Algorithm
+  # required
+  algorithm = ForestAlgorithm
+
+  # this keyword should be used to describe a specific room 
+  ROOM
+    unique = true
+    # required
+    name = Surrounded by trees
+    DESCRIPTION {
+      You are standing in the middle of a forest on a trail seemingly made by
+      wondering animals.  You feel as if no one has entered these woods in a
+      very long time.
+    }
+    #ITEMS
+    #  ITEM
+    #    vnum = 0
+    #    CONTAINS
+    #      ITEM
+    #        vnum = 0
+    #        CONTAINS
+    #  etc...
+    #        END
+    #      END
+    #    END
+    #  END
+    #END
+    #MOBS
+    #  MOB
+    #    vnum = 0
+         # items in inventory
+    #    ITEMS
+    #      ITEM
+    #        etc...
+    #      END
+    #    END
+         # items equipped
+    #    EQUIP
+    #      ITEM
+    #        etc...
+    #      END
+    #    END
+    #  END
+    #END
+  END
+  
+  #this keyword describes regions that can span more than one room but share similar information
+  REGION
+    # choices: maze corridor area 
+    structure = corridor
+    # choices: straight bent (etc..)
+    type = bent
+    # range describing z coordinate (-# describes below ground, 0 is ground level, # describes above ground) (i.e. - [-2,2] or [0,0])
+    z = [ 0, 0 ]
+    
+    ROOM
+      etc...
+    END
+  END
+  
+  MOB
+    
+  END
+  
+  ITEM
+    
+  END
